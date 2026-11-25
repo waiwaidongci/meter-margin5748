@@ -54,7 +54,7 @@ class BenchRow(BaseModel):
     meter_id: Identifier = Field(title="表号")
     bench_batch_id: Identifier = Field(title="台架批次号")
     measured_at: AwareDatetime = Field(title="测量时间（带时区）")
-    stage: Stage = Field(title="数据队列")
+    stage: Stage | None = Field(default=None, title="数据队列；留空时按测量时间自动切分")
     label: Fault | None = Field(default=None, title="复核标签")
     q1_error_pct: Number = Field(ge=-100, le=1_000, title="Q1 示值误差（%）")
     q2_error_pct: Number = Field(ge=-100, le=1_000, title="Q2 示值误差（%）")
@@ -67,6 +67,38 @@ class BenchRow(BaseModel):
     @classmethod
     def empty_csv_label(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("stage", mode="before")
+    @classmethod
+    def empty_or_alias_stage(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            text = value.strip()
+            if not text or text.lower() in {
+                "auto",
+                "history",
+                "none",
+                "null",
+                "unassigned",
+                "unmarked",
+            }:
+                return None
+            # “比选队列”在领域持久化命名中仍叫 validation。
+            aliases = {
+                "selection": "validation",
+                "comparison": "validation",
+                "isolated": None,
+                "quarantined": None,
+                "quarantine": None,
+            }
+            if text in aliases:
+                return aliases[text]
+            lower = text.lower()
+            if lower in aliases:
+                return aliases[lower]
+            return text
+        return value
 
     @field_validator("measured_at", mode="before")
     @classmethod

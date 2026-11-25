@@ -7,6 +7,7 @@ from app.analysis.models import Review
 from app.data.repository import get_dataset
 from app.errors import Problem
 from domain.spec import METHOD, TITLE
+from domain.resegment import read_grouping, read_report_grouping
 
 
 def approved_report(db, run):
@@ -14,10 +15,17 @@ def approved_report(db, run):
     if review is None or review.decision != Decision.approved:
         raise Problem(409, 'report_not_approved', 'A reviewer must approve the analysis')
     dataset = get_dataset(db, run.dataset_id)
-    return {'run_id': run.id, 'project': TITLE, 'method': METHOD,
-            'dataset': {'id': dataset.id, 'name': dataset.name, 'checksum': dataset.checksum,
-                        'row_count': dataset.row_count},
-            'options': run.options, 'result': run.result, 'review': describe_review(review)}
+    report = {'run_id': run.id, 'project': TITLE, 'method': METHOD,
+              'dataset': {'id': dataset.id, 'name': dataset.name, 'checksum': dataset.checksum,
+                          'row_count': dataset.row_count},
+              'options': run.options, 'result': run.result, 'review': describe_review(review)}
+    # New reports already contain result.grouping; old reports fall back to
+    # their original tables.cohorts aggregate.
+    if isinstance(run.result, dict):
+        grouping = read_grouping(run.result)
+        report['grouping'] = grouping
+        report['cohort_grouping'] = grouping
+    return report
 
 
 def csv_value(value):
